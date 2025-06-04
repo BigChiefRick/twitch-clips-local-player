@@ -1,0 +1,48 @@
+{
+  "name": "twitch-clips-local-player",
+  "version": "1.0.0",
+  "description": "Local Twitch clips player optimized for OBS and cloud streaming platforms",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "install-deps": "npm install && pip install yt-dlp",
+    "setup-service": "sudo cp systemd/twitch-clips.service /etc/systemd/system/ && sudo systemctl daemon-reload",
+    "test": "node test.js",
+    "cleanup": "curl -X POST http://localhost:3001/cleanup"
+  },
+  "keywords": [
+    "twitch",
+    "clips",
+    "obs",
+    "streaming",
+    "video",
+    "local",
+    "autoplay",
+    "golightstream"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/twitch-clips-local-player.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/twitch-clips-local-player/issues"
+  },
+  "homepage": "https://github.com/yourusername/twitch-clips-local-player#readme",
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "os": [
+    "linux",
+    "darwin"
+  ]
+}
