@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Twitch Clips Local Player</title>
+        <style>
+            body { margin: 0; padding: 0; background: #000; overflow: hidden; }
+            #videoPlayer { width: 100%; height: 100vh; object-fit: cover; }
+            .status { position: absolute; top: 10px; right: 10px; color: white; background: rgba(0,0,0,0.8); padding: 5px 10px; border-radius: 5px; font-size: 12px; font-family: Arial; }
+            .clip-info { position: absolute; bottom: 20px; left: 20px; color: white; background: rgba(0,0,0,0.8); padding: 10px 15px; border-radius: 5px; font-size: 14px; font-family: Arial; max-width: 400px; }
+        </style>
+    </head>
+    <body>
+        <div class="status" id="status">Loading...</div>
+        <div class="clip-info" id="clipInfo" style="display: none;"></div>
+        
+        <!-- No controls, force autoplay with sound for OBS -->
+        <video id="videoPlayer" autoplay allow="autoplay">
+            <source id="videoSource" src="" type="video/mp4">
+        </video>
+
+        <script>
+            class CachedClipPlayer {
+                constructor() {
+                    this.config = {
+                        username: new URLSearchParams(location.search).get('username') || 'ticklefitz',
+                        clientId: new URLSearchParams(location.search).get('clientId') || 'YOURCLIENTID',
+                        clientSecret: new URLSearchParams(location.search).get('clientSecret') || 'YOURCLIENTSECRET',
+                        backendUrl: new URLSearchParams(location.search).get('backend') || 'https://racer.netandvet.com/api',
+                        showInfo: new URLSearchParams(location.search).get('showInfo') !== 'false',
+                        obsMode: new URLSearchParams(location.search).get('obsMode') === 'true'
+                    };
+                    
+                    this.clips = [];
+                    this.currentIndex = 0;
+                    this.video = document.getElementById('videoPlayer');
+                    this.source = document.getElementById('videoSource');
+                    this.status = document.getElementById('status');
+                    this.clipInfo = document.getElementById('clipInfo');
+                    this.isPlaying = false;
+                    this.autoAdvanceTimeout = null;
+                    this.hasUnmuted = false;
+                    
+                    if (this.config.clientId === 'YOURCLIENTID') {
+                        this.status.textContent = 'Error: Need clientId and clientSecret in URL';
+                        return;
+                    }
+                    
+                    this.setupEvents();
+                    this.init();
+                }
+
+                setupEvents() {
+                    // Handle video end
+                    this.video.addEventListener('ended', () => {
+                        console.log('Video ended naturally');
+                        this.nextClip();
+                    });
+                    
+                    // Handle video errors
+                    this.video.addEventListener('error', (e) => {
+                        console.error('Video error:', e);
+                        this.status.textContent = 'Video error, trying next...';
+                        setTimeout(() => this.nextClip(), 2000);
+                    });
+                    
+                    // Handle successful load
+                    this.video.addEventListener('loadstart', () => {
+                        this.status.textContent = 'Loading video...';
+                    });
+                    
+                    this.video.addEventListener('canplay', () => {
+                        this.status.textContent = 'Ready to play';
+                    });
+                    
+                    // Handle when video actually starts playing
+                    this.video.addEventListener('playing', () => {
+                        console.log('Video is playing');
+                        this.isPlaying = true;
+                        this.status.textContent = 'Playing';
+                        this.setAutoAdvance();
+                        
+                        // Force unmute - since files have audio
+                        this.video.muted = false;
+                        this.video.volume = 1.0;
+                        console.log('✅ Unmuted video');
+                    });
+                    
+                    // Handle pause
+                    this.video.addEventListener('pause', () => {
+                        console.log('Video paused');
+                        this.isPlaying = false;
+                        this.clearAutoAdvance();
+                    });
+                }
+
+                setAutoAdvance() {
+                    this.clearAutoAdvance();
+                    
+                    const currentClip = this.clips[this.currentIndex];
+                    if (currentClip && currentClip.duration) {
+                        // Add 2 second buffer to the clip duration
+                        const timeoutMs = (currentClip.duration + 2) * 1000;
+                        console.log(`Setting auto-advance for ${currentClip.duration}s + 2s buffer`);
+                        
+                        this.autoAdvanceTimeout = setTimeout(() => {
+                            console.log('Auto-advance timeout triggered');
+                            if (this.isPlaying) {
+                                this.nextClip();
+                            }
+                        }, timeoutMs);
+                    }
+                }
+
+                clearAutoAdvance() {
+                    if (this.autoAdvanceTimeout) {
+                        clearTimeout(this.autoAdvanceTimeout);
+                        this.autoAdvanceTimeout = null;
+                    }
+                }
+
+                async init() {
+                    try {
+                        this.status.textContent = 'Loading clips...';
+                        
+                        const response = await fetch(`${this.config.backendUrl}/popular-clips/${this.config.username}?clientId=${this.config.clientId}&clientSecret=${this.config.clientSecret}&limit=15&period=week`);
+                        const data = await response.json();
+                        
+                        this.clips = data.clips || [];
+                        
+                        if (this.clips.length > 0) {
+                            this.status.textContent = `Loaded ${this.clips.length} clips ${data.cached ? '(cached)' : '(fresh)'}`;
+                            setTimeout(() => this.playClip(), 1000);
+                        } else {
+                            this.status.textContent = 'No clips found';
+                        }
+                    } catch (error) {
+                        this.status.textContent = `Error: ${error.message}`;
+                        console.error('Init error:', error);
+                    }
+                }
+
+                playClip() {
+                    if (this.currentIndex >= this.clips.length) {
+                        this.currentIndex = 0;
+                    }
+                    
+                    const clip = this.clips[this.currentIndex];
+                    if (!clip || !clip.localUrl) {
+                        console.error('No valid clip at index', this.currentIndex);
+                        this.nextClip();
+                        return;
+                    }
+                    
+                    // Clear any existing auto-advance
+                    this.clearAutoAdvance();
+                    
+                    // Update clip info
+                    if (this.config.showInfo) {
+                        this.clipInfo.innerHTML = `
+                            <strong>${clip.title}</strong><br>
+                            by ${clip.creator} • ${clip.duration}s<br>
+                            <small>Clip ${this.currentIndex + 1}/${this.clips.length}</small>
+                        `;
+                        this.clipInfo.style.display = 'block';
+                    }
+                    
+                    console.log(`Playing clip ${this.currentIndex + 1}: ${clip.title} (${clip.duration}s)`);
+                    console.log(`URL: ${clip.localUrl}`);
+                    
+                    this.status.textContent = `Playing: ${clip.title}`;
+                    
+                    // KEEP UNMUTED and let it try to autoplay
+                    this.video.muted = false;
+                    this.video.volume = 1.0;
+                    this.source.src = clip.localUrl;
+                    this.video.load();
+                    
+                    // Force play
+                    this.video.play().catch(e => {
+                        console.log('Autoplay failed, will need manual play');
+                    });
+                }
+
+                nextClip() {
+                    console.log('Moving to next clip');
+                    this.clearAutoAdvance();
+                    this.currentIndex++;
+                    
+                    if (this.currentIndex >= this.clips.length) {
+                        console.log('Reached end of clips, restarting from beginning');
+                        this.currentIndex = 0;
+                    }
+                    
+                    // Small delay before playing next clip
+                    setTimeout(() => this.playClip(), 500);
+                }
+            }
+
+            // Initialize
+            console.log('Starting Twitch Clips Local Player');
+            new CachedClipPlayer();
+        </script>
+    </body>
+</html>
