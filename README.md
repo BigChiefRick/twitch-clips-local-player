@@ -216,7 +216,6 @@ twitch-clips-local-player/
 │   └── site.conf          # Nginx configuration
 └── docs/
     ├── setup-guide.md     # Detailed setup guide
-    └── troubleshooting.md # Common issues
 ```
 
 ## 🤝 Contributing
