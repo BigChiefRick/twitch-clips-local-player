@@ -156,13 +156,24 @@
                     // Clear any existing auto-advance
                     this.clearAutoAdvance();
                     
-                    // Update clip info
+                    // Update clip info (using textContent to prevent XSS)
                     if (this.config.showInfo) {
-                        this.clipInfo.innerHTML = `
-                            <strong>${clip.title}</strong><br>
-                            by ${clip.creator} • ${clip.duration}s<br>
-                            <small>Clip ${this.currentIndex + 1}/${this.clips.length}</small>
-                        `;
+                        this.clipInfo.textContent = '';
+
+                        const titleEl = document.createElement('strong');
+                        titleEl.textContent = clip.title;
+
+                        const metaText = document.createTextNode(`by ${clip.creator} \u2022 ${clip.duration}s`);
+
+                        const countEl = document.createElement('small');
+                        countEl.textContent = `Clip ${this.currentIndex + 1}/${this.clips.length}`;
+
+                        this.clipInfo.appendChild(titleEl);
+                        this.clipInfo.appendChild(document.createElement('br'));
+                        this.clipInfo.appendChild(metaText);
+                        this.clipInfo.appendChild(document.createElement('br'));
+                        this.clipInfo.appendChild(countEl);
+
                         this.clipInfo.style.display = 'block';
                     }
                     

@@ -253,17 +253,42 @@ function downloadClipLocally(clip, req) {
     });
 }
 
+// Helper function to fetch with timeout
+async function fetchWithTimeout(url, options = {}, timeoutMs = 10000) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+        const response = await fetch(url, {
+            ...options,
+            signal: controller.signal
+        });
+        return response;
+    } finally {
+        clearTimeout(timeout);
+    }
+}
+
 // Get popular clips from Twitch API
 async function getPopularClips(username, limit, period, clientId, clientSecret) {
-    const tokenResponse = await fetch(
+    const tokenResponse = await fetchWithTimeout(
         `https://id.twitch.tv/oauth2/token?client_id=${clientId}&client_secret=${clientSecret}&grant_type=client_credentials`,
         { method: 'POST' }
     );
-    
+
+    if (!tokenResponse.ok) {
+        throw new Error(`Failed to get OAuth token: ${tokenResponse.status} ${tokenResponse.statusText}`);
+    }
+
     const tokenData = await tokenResponse.json();
+
+    if (!tokenData.access_token) {
+        throw new Error('OAuth response missing access_token');
+    }
+
     const accessToken = tokenData.access_token;
 
-    const userResponse = await fetch(
+    const userResponse = await fetchWithTimeout(
         `https://api.twitch.tv/helix/users?login=${username}`,
         {
             headers: {
@@ -273,19 +298,28 @@ async function getPopularClips(username, limit, period, clientId, clientSecret) 
         }
     );
 
+    if (!userResponse.ok) {
+        throw new Error(`Failed to get user info: ${userResponse.status} ${userResponse.statusText}`);
+    }
+
     const userData = await userResponse.json();
+
+    if (!userData.data || userData.data.length === 0) {
+        throw new Error(`Twitch user '${username}' not found`);
+    }
+
     const broadcasterId = userData.data[0].id;
 
     let startDate = new Date();
     switch(period) {
-        case 'day': 
-            startDate.setDate(startDate.getDate() - 1); 
+        case 'day':
+            startDate.setDate(startDate.getDate() - 1);
             break;
-        case 'week': 
-            startDate.setDate(startDate.getDate() - 7); 
+        case 'week':
+            startDate.setDate(startDate.getDate() - 7);
             break;
-        case 'month': 
-            startDate.setMonth(startDate.getMonth() - 1); 
+        case 'month':
+            startDate.setMonth(startDate.getMonth() - 1);
             break;
     }
 
@@ -294,15 +328,23 @@ async function getPopularClips(username, limit, period, clientId, clientSecret) 
         query += `&started_at=${startDate.toISOString()}`;
     }
 
-    const clipsResponse = await fetch(query, {
+    const clipsResponse = await fetchWithTimeout(query, {
         headers: {
             'Client-ID': clientId,
             'Authorization': `Bearer ${accessToken}`
         }
     });
 
+    if (!clipsResponse.ok) {
+        throw new Error(`Failed to get clips: ${clipsResponse.status} ${clipsResponse.statusText}`);
+    }
+
     const clipsData = await clipsResponse.json();
-    
+
+    if (!clipsData.data) {
+        return [];
+    }
+
     return clipsData.data.map(clip => ({
         id: clip.id,
         title: clip.title,
