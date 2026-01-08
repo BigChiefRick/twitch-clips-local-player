@@ -23,13 +23,14 @@
         <script>
             class CachedClipPlayer {
                 constructor() {
+                    const params = new URLSearchParams(location.search);
                     this.config = {
-                        username: new URLSearchParams(location.search).get('username') || 'ticklefitz',
-                        clientId: new URLSearchParams(location.search).get('clientId') || 'YOURCLIENTID',
-                        clientSecret: new URLSearchParams(location.search).get('clientSecret') || 'YOURCLIENTSECRET',
-                        backendUrl: new URLSearchParams(location.search).get('backend') || 'https://racer.netandvet.com/api',
-                        showInfo: new URLSearchParams(location.search).get('showInfo') !== 'false',
-                        obsMode: new URLSearchParams(location.search).get('obsMode') === 'true'
+                        username: params.get('username') || 'ticklefitz',
+                        clientId: params.get('clientId') || 'YOURCLIENTID',
+                        clientSecret: params.get('clientSecret') || 'YOURCLIENTSECRET',
+                        backendUrl: params.get('backend') || '/clips/api',
+                        showInfo: params.get('showInfo') !== 'false',
+                        obsMode: params.get('obsMode') === 'true'
                     };
                     
                     this.clips = [];

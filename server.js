@@ -8,6 +8,8 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3001;
 const CLIPS_DIR = path.join(__dirname, 'downloaded_clips');
+// Base path for video URLs - configure based on your nginx setup
+const VIDEO_URL_PATH = process.env.VIDEO_URL_PATH || '/clips/videos';
 
 app.use(cors());
 app.use(express.json());
@@ -88,7 +90,7 @@ app.get('/popular-clips/:username', async (req, res) => {
                     downloadedClips.push({
                         ...clip,
                         localFile: downloadResult.filename,
-                        localUrl: `https://${req.get('host')}/clips/${encodeURIComponent(downloadResult.filename)}`,
+                        localUrl: `${VIDEO_URL_PATH}/${encodeURIComponent(downloadResult.filename)}`,
                         duration: clip.duration // Make sure duration is included
                     });
                     console.log(`✅ Downloaded: ${clip.title} (${clip.duration}s)`);
@@ -137,7 +139,7 @@ function getExistingClips(req) {
                 duration: 30, // Default duration for cached clips
                 views: 0,
                 localFile: file,
-                localUrl: `https://${req.get('host')}/clips/${encodeURIComponent(file)}`,
+                localUrl: `${VIDEO_URL_PATH}/${encodeURIComponent(file)}`,
                 created: stats.birthtime.toISOString(),
                 cached: true
             };

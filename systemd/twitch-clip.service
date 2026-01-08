@@ -1,6 +1,6 @@
 [Unit]
 Description=Twitch Clips Local Player Backend
-Documentation=https://github.com/yourusername/twitch-clips-local-player
+Documentation=https://github.com/BigChiefRick/twitch-clips-local-player
 After=network.target network-online.target
 Wants=network-online.target
 
@@ -8,7 +8,7 @@ Wants=network-online.target
 Type=simple
 User=www-data
 Group=www-data
-WorkingDirectory=/var/www/html/twitch-clips-backend
+WorkingDirectory=/var/www/html/twitch-clips-player
 ExecStart=/usr/bin/node server.js
 ExecReload=/bin/kill -s HUP $MAINPID
 Restart=always
@@ -19,13 +19,14 @@ KillMode=process
 # Environment
 Environment=NODE_ENV=production
 Environment=PORT=3001
+Environment=VIDEO_URL_PATH=/clips/videos
 
 # Security
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/www/html/twitch-clips-backend/downloaded_clips
+ReadWritePaths=/var/www/html/twitch-clips-player/downloaded_clips
 
 # Logging
 StandardOutput=journal
