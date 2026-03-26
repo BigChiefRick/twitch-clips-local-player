@@ -128,7 +128,13 @@
                         const data = await response.json();
                         
                         this.clips = data.clips || [];
-                        
+
+                        // Shuffle clips for random playback order
+                        for (let i = this.clips.length - 1; i > 0; i--) {
+                            const j = Math.floor(Math.random() * (i + 1));
+                            [this.clips[i], this.clips[j]] = [this.clips[j], this.clips[i]];
+                        }
+
                         if (this.clips.length > 0) {
                             this.status.textContent = `Loaded ${this.clips.length} clips ${data.cached ? '(cached)' : '(fresh)'}`;
                             setTimeout(() => this.playClip(), 1000);
@@ -197,10 +203,15 @@
                 nextClip() {
                     console.log('Moving to next clip');
                     this.clearAutoAdvance();
-                    this.currentIndex++;
-                    
-                    if (this.currentIndex >= this.clips.length) {
-                        console.log('Reached end of clips, restarting from beginning');
+
+                    // Pick a random clip, avoiding the current one
+                    if (this.clips.length > 1) {
+                        let next;
+                        do {
+                            next = Math.floor(Math.random() * this.clips.length);
+                        } while (next === this.currentIndex);
+                        this.currentIndex = next;
+                    } else {
                         this.currentIndex = 0;
                     }
                     
