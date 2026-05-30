@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Single Twitch Clip Local Player</title>
+        <style>
+            body { margin: 0; padding: 0; background: #000; overflow: hidden; }
+            #videoPlayer { width: 100%; height: 100vh; object-fit: cover; }
+            .status { position: absolute; top: 10px; right: 10px; color: white; background: rgba(0,0,0,0.8); padding: 5px 10px; border-radius: 5px; font-size: 12px; font-family: Arial; }
+            .clip-info { position: absolute; bottom: 20px; left: 20px; color: white; background: rgba(0,0,0,0.8); padding: 10px 15px; border-radius: 5px; font-size: 14px; font-family: Arial; max-width: 400px; }
+        </style>
+    </head>
+    <body>
+        <div class="status" id="status">Loading...</div>
+        <div class="clip-info" id="clipInfo" style="display: none;"></div>
+
+        <!-- No controls, force autoplay with sound for OBS -->
+        <video id="videoPlayer" autoplay allow="autoplay">
+            <source id="videoSource" src="" type="video/mp4">
+        </video>
+
+        <script>
+            class SingleClipPlayer {
+                constructor() {
+                    const params = new URLSearchParams(location.search);
+                    this.config = {
+                        clipUrl: params.get('url') || params.get('clipUrl') || '',
+                        backendUrl: params.get('backend') || `${location.origin}`,
+                        showInfo: params.get('showInfo') !== 'false',
+                        loop: params.get('loop') !== 'false',
+                        forceRefresh: params.get('forceRefresh') === 'true'
+                    };
+
+                    this.clip = null;
+                    this.video = document.getElementById('videoPlayer');
+                    this.source = document.getElementById('videoSource');
+                    this.status = document.getElementById('status');
+                    this.clipInfo = document.getElementById('clipInfo');
+                    this.isPlaying = false;
+                    this.autoAdvanceTimeout = null;
+
+                    if (!this.config.clipUrl) {
+                        this.status.textContent = 'Error: Need url=TWITCH_CLIP_URL in URL';
+                        return;
+                    }
+
+                    this.setupEvents();
+                    this.init();
+                }
+
+                setupEvents() {
+                    this.video.addEventListener('ended', () => {
+                        console.log('Video ended naturally');
+                        this.clearAutoAdvance();
+                        if (this.config.loop) {
+                            this.playClip();
+                        }
+                    });
+
+                    this.video.addEventListener('error', (e) => {
+                        console.error('Video error:', e);
+                        this.status.textContent = 'Video error';
+                    });
+
+                    this.video.addEventListener('loadstart', () => {
+                        this.status.textContent = 'Loading video...';
+                    });
+
+                    this.video.addEventListener('canplay', () => {
+                        this.status.textContent = 'Ready to play';
+                    });
+
+                    this.video.addEventListener('playing', () => {
+                        console.log('Video is playing');
+                        this.isPlaying = true;
+                        this.status.textContent = 'Playing';
+                        this.setAutoAdvance();
+                        this.video.muted = false;
+                        this.video.volume = 1.0;
+                        console.log('✅ Unmuted video');
+                    });
+
+                    this.video.addEventListener('pause', () => {
+                        console.log('Video paused');
+                        this.isPlaying = false;
+                        this.clearAutoAdvance();
+                    });
+                }
+
+                setAutoAdvance() {
+                    this.clearAutoAdvance();
+
+                    if (this.clip && this.clip.duration && this.config.loop) {
+                        const timeoutMs = (this.clip.duration + 2) * 1000;
+                        console.log(`Setting replay for ${this.clip.duration}s + 2s buffer`);
+
+                        this.autoAdvanceTimeout = setTimeout(() => {
+                            console.log('Replay timeout triggered');
+                            if (this.isPlaying) {
+                                this.playClip();
+                            }
+                        }, timeoutMs);
+                    }
+                }
+
+                clearAutoAdvance() {
+                    if (this.autoAdvanceTimeout) {
+                        clearTimeout(this.autoAdvanceTimeout);
+                        this.autoAdvanceTimeout = null;
+                    }
+                }
+
+                async init() {
+                    try {
+                        this.status.textContent = 'Downloading clip...';
+
+                        const requestUrl = new URL(`${this.config.backendUrl.replace(/\/$/, '')}/single-clip`);
+                        requestUrl.searchParams.set('url', this.config.clipUrl);
+                        if (this.config.forceRefresh) {
+                            requestUrl.searchParams.set('forceRefresh', 'true');
+                        }
+
+                        const response = await fetch(requestUrl.toString());
+                        const data = await response.json();
+
+                        if (!response.ok || !data.success) {
+                            throw new Error(data.error || 'Unable to load clip');
+                        }
+
+                        this.clip = data.clip;
+
+                        if (this.clip && this.clip.localUrl) {
+                            this.status.textContent = `Loaded clip ${data.cached ? '(cached)' : '(fresh)'}`;
+                            setTimeout(() => this.playClip(), 1000);
+                        } else {
+                            this.status.textContent = 'No clip found';
+                        }
+                    } catch (error) {
+                        this.status.textContent = `Error: ${error.message}`;
+                        console.error('Init error:', error);
+                    }
+                }
+
+                playClip() {
+                    if (!this.clip || !this.clip.localUrl) {
+                        console.error('No valid clip loaded');
+                        return;
+                    }
+
+                    this.clearAutoAdvance();
+
+                    if (this.config.showInfo) {
+                        this.clipInfo.textContent = '';
+
+                        const titleEl = document.createElement('strong');
+                        titleEl.textContent = this.clip.title;
+
+                        const metaText = document.createTextNode(`by ${this.clip.creator} \u2022 ${this.clip.duration}s`);
+                        const modeText = document.createTextNode(this.config.loop ? 'Single clip loop' : 'Single clip');
+
+                        this.clipInfo.appendChild(titleEl);
+                        this.clipInfo.appendChild(document.createElement('br'));
+                        this.clipInfo.appendChild(metaText);
+                        this.clipInfo.appendChild(document.createElement('br'));
+                        this.clipInfo.appendChild(modeText);
+
+                        this.clipInfo.style.display = 'block';
+                    }
+
+                    console.log(`Playing single clip: ${this.clip.title} (${this.clip.duration}s)`);
+                    console.log(`URL: ${this.clip.localUrl}`);
+
+                    this.status.textContent = `Playing: ${this.clip.title}`;
+                    this.video.muted = false;
+                    this.video.volume = 1.0;
+                    this.video.currentTime = 0;
+                    this.source.src = this.clip.localUrl;
+                    this.video.load();
+
+                    this.video.play().catch(() => {
+                        console.log('Autoplay failed, will need manual play');
+                    });
+                }
+            }
+
+            console.log('Starting Single Twitch Clip Local Player');
+            new SingleClipPlayer();
+        </script>
+    </body>
+</html>
