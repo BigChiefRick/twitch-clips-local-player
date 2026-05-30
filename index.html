@@ -28,9 +28,12 @@
                         username: params.get('username') || 'ticklefitz',
                         clientId: params.get('clientId') || 'YOURCLIENTID',
                         clientSecret: params.get('clientSecret') || 'YOURCLIENTSECRET',
-                        backendUrl: params.get('backend') || this.getDefaultBackendUrl(),
+                        backendUrl: params.get('backend') || 'https://racer.netandvet.com/api',
                         showInfo: params.get('showInfo') !== 'false',
-                        obsMode: params.get('obsMode') === 'true'
+                        obsMode: params.get('obsMode') === 'true',
+                        clipCount: params.get('clipCount') || '15',
+                        period: params.get('period') || 'week',
+                        forceRefresh: params.get('forceRefresh') === 'true'
                     };
                     
                     this.clips = [];
@@ -137,25 +140,16 @@
                     try {
                         this.status.textContent = 'Loading clips...';
                         
-                        const apiUrl = new URL(`${this.config.backendUrl.replace(/\/$/, '')}/popular-clips/${encodeURIComponent(this.config.username)}`);
-                        apiUrl.searchParams.set('clientId', this.config.clientId);
-                        apiUrl.searchParams.set('clientSecret', this.config.clientSecret);
-                        apiUrl.searchParams.set('limit', '15');
-                        apiUrl.searchParams.set('period', 'week');
-
-                        const response = await fetch(apiUrl.toString());
-                        const contentType = response.headers.get('content-type') || '';
-
-                        if (!response.ok) {
-                            const body = await response.text();
-                            throw new Error(`Backend request failed (${response.status}). Check nginx is proxying ${this.config.backendUrl}. ${body.slice(0, 80)}`);
+                        const requestUrl = new URL(`${this.config.backendUrl.replace(/\/$/, '')}/popular-clips/${this.config.username}`);
+                        requestUrl.searchParams.set('clientId', this.config.clientId);
+                        requestUrl.searchParams.set('clientSecret', this.config.clientSecret);
+                        requestUrl.searchParams.set('limit', this.config.clipCount);
+                        requestUrl.searchParams.set('period', this.config.period);
+                        if (this.config.forceRefresh) {
+                            requestUrl.searchParams.set('forceRefresh', 'true');
                         }
 
-                        if (!contentType.includes('application/json')) {
-                            const body = await response.text();
-                            throw new Error(`Backend returned ${contentType || 'non-JSON'} from ${this.config.backendUrl}. Check nginx API proxy. ${body.slice(0, 80)}`);
-                        }
-
+                        const response = await fetch(requestUrl.toString());
                         const data = await response.json();
                         
                         this.clips = data.clips || [];

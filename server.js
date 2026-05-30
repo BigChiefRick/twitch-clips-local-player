@@ -26,6 +26,18 @@ if (!fs.existsSync(CLIPS_DIR)) {
     console.log(`Created clips directory: ${CLIPS_DIR}`);
 }
 
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+app.get('/index.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+app.get('/single.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'single.html'));
+});
+
 app.get('/health', (req, res) => {
     res.json({
         status: 'OK',
@@ -33,6 +45,121 @@ app.get('/health', (req, res) => {
         clipsDir: CLIPS_DIR
     });
 });
+
+
+function getRequestBaseUrl(req) {
+    const proto = req.get('x-forwarded-proto') || req.protocol || 'http';
+    return `${proto}://${req.get('host')}`;
+}
+
+function getClipPublicUrl(req, filename) {
+    return `${getRequestBaseUrl(req)}/clips/${encodeURIComponent(filename)}`;
+}
+
+function sanitizeFilenamePart(value, fallback = 'clip', maxLength = 60) {
+    const sanitized = String(value || fallback)
+        .replace(/[^a-zA-Z0-9\s\-_]/g, '')
+        .replace(/\s+/g, ' ')
+        .substring(0, maxLength)
+        .trim()
+        .replace(/\s/g, '_');
+
+    return sanitized || fallback;
+}
+
+function extractTwitchClipId(clipUrl) {
+    try {
+        const parsed = new URL(clipUrl);
+        const host = parsed.hostname.toLowerCase().replace(/^www\./, '');
+
+        if (host === 'clips.twitch.tv') {
+            return parsed.pathname.split('/').filter(Boolean)[0] || null;
+        }
+
+        if (host === 'twitch.tv') {
+            const parts = parsed.pathname.split('/').filter(Boolean);
+            const clipIndex = parts.findIndex(part => part.toLowerCase() === 'clip');
+            if (clipIndex !== -1 && parts[clipIndex + 1]) {
+                return parts[clipIndex + 1];
+            }
+        }
+    } catch (error) {
+        return null;
+    }
+
+    return null;
+}
+
+function validateTwitchClipUrl(clipUrl) {
+    const clipId = extractTwitchClipId(clipUrl);
+    if (!clipId) {
+        throw new Error('A valid Twitch clip URL is required');
+    }
+
+    return clipId;
+}
+
+function findCachedClipById(clipId, req) {
+    return getExistingClips(req).find(clip => clip.id === clipId) || null;
+}
+
+function getClipMetadata(clipUrl, fallbackId) {
+    return new Promise((resolve) => {
+        const ytDlpProcess = spawn('yt-dlp', [
+            '--dump-single-json',
+            '--no-playlist',
+            '--no-warnings',
+            clipUrl
+        ]);
+
+        let output = '';
+
+        ytDlpProcess.stdout.on('data', (data) => {
+            output += data.toString();
+        });
+
+        ytDlpProcess.on('close', (code) => {
+            if (code === 0 && output.trim()) {
+                try {
+                    const info = JSON.parse(output);
+                    return resolve({
+                        id: sanitizeFilenamePart(info.id || fallbackId, fallbackId, 80),
+                        title: info.title || 'Single Twitch Clip',
+                        url: clipUrl,
+                        creator: info.uploader || info.channel || 'Twitch',
+                        duration: Math.ceil(Number(info.duration)) || 30,
+                        views: Number(info.view_count) || 0,
+                        created: info.upload_date || new Date().toISOString()
+                    });
+                } catch (error) {
+                    console.error('Failed to parse yt-dlp metadata:', error.message);
+                }
+            }
+
+            resolve({
+                id: sanitizeFilenamePart(fallbackId, 'single-clip', 80),
+                title: 'Single Twitch Clip',
+                url: clipUrl,
+                creator: 'Twitch',
+                duration: 30,
+                views: 0,
+                created: new Date().toISOString()
+            });
+        });
+
+        ytDlpProcess.on('error', () => {
+            resolve({
+                id: sanitizeFilenamePart(fallbackId, 'single-clip', 80),
+                title: 'Single Twitch Clip',
+                url: clipUrl,
+                creator: 'Twitch',
+                duration: 30,
+                views: 0,
+                created: new Date().toISOString()
+            });
+        });
+    });
+}
 
 // Smart clips endpoint - uses cache first
 app.get('/popular-clips/:username', async (req, res) => {
@@ -88,7 +215,7 @@ app.get('/popular-clips/:username', async (req, res) => {
                     downloadedClips.push({
                         ...clip,
                         localFile: downloadResult.filename,
-                        localUrl: `https://${req.get('host')}/clips/${encodeURIComponent(downloadResult.filename)}`,
+                        localUrl: getClipPublicUrl(req, downloadResult.filename),
                         duration: clip.duration // Make sure duration is included
                     });
                     console.log(`✅ Downloaded: ${clip.title} (${clip.duration}s)`);
@@ -137,7 +264,7 @@ function getExistingClips(req) {
                 duration: 30, // Default duration for cached clips
                 views: 0,
                 localFile: file,
-                localUrl: `https://${req.get('host')}/clips/${encodeURIComponent(file)}`,
+                localUrl: getClipPublicUrl(req, file),
                 created: stats.birthtime.toISOString(),
                 cached: true
             };
@@ -147,6 +274,57 @@ function getExistingClips(req) {
         return [];
     }
 }
+
+
+// Single clip endpoint - downloads one Twitch clip by URL and returns local playback info
+app.get('/single-clip', async (req, res) => {
+    const { url, forceRefresh = 'false' } = req.query;
+
+    if (!url) {
+        return res.status(400).json({ error: 'url query parameter required' });
+    }
+
+    try {
+        const clipId = validateTwitchClipUrl(url);
+        const safeClipId = sanitizeFilenamePart(clipId, 'single-clip', 80);
+        const cachedClip = findCachedClipById(safeClipId, req);
+
+        if (cachedClip && forceRefresh !== 'true') {
+            console.log(`✅ Using cached single clip: ${cachedClip.title}`);
+            return res.json({
+                success: true,
+                clip: cachedClip,
+                clips: [cachedClip],
+                cached: true
+            });
+        }
+
+        const clip = await getClipMetadata(url, safeClipId);
+        clip.id = safeClipId;
+
+        const downloadResult = await downloadClipLocally(clip, req);
+        if (!downloadResult || !downloadResult.success) {
+            throw new Error('Failed to download clip with yt-dlp');
+        }
+
+        const downloadedClip = {
+            ...clip,
+            localFile: downloadResult.filename,
+            localUrl: getClipPublicUrl(req, downloadResult.filename),
+            cached: false
+        };
+
+        res.json({
+            success: true,
+            clip: downloadedClip,
+            clips: [downloadedClip],
+            cached: false
+        });
+    } catch (error) {
+        console.error('Single clip error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
 
 // List clips endpoint
 app.get('/list-clips', (req, res) => {
@@ -189,14 +367,9 @@ app.post('/cleanup', (req, res) => {
 function downloadClipLocally(clip, req) {
     return new Promise((resolve, reject) => {
         // Create safe filename
-        const safeTitle = clip.title
-            .replace(/[^a-zA-Z0-9\s\-_]/g, '')
-            .replace(/\s+/g, ' ')
-            .substring(0, 30)
-            .trim()
-            .replace(/\s/g, '_');
-
-        const baseFilename = `${clip.id}-${safeTitle}`;
+        const safeId = sanitizeFilenamePart(clip.id, 'clip', 80);
+        const safeTitle = sanitizeFilenamePart(clip.title, 'untitled', 30);
+        const baseFilename = `${safeId}-${safeTitle}`;
         const outputTemplate = path.join(CLIPS_DIR, `${baseFilename}.%(ext)s`);
 
         console.log(`⬇️  Downloading: ${clip.title}`);
