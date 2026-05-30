@@ -10,6 +10,7 @@ Downloads Twitch clips locally and serves them as MP4 files, bypassing browser r
 - ✅ **Full audio support** - Bypasses browser mute restrictions  
 - ✅ **OBS/Golightstream ready** - Zero user interaction required
 - ✅ **Smart caching** - Reuses existing clips, fast loading on repeat visits
+- ✅ **Single clip mode** - Download and replay one Twitch clip from a URL
 - ✅ **Auto-advancing** - Seamless transitions between clips
 - ✅ **HTTPS ready** - Works with SSL certificates
 - ✅ **Configurable** - Easy URL parameters for different streamers
@@ -133,7 +134,29 @@ https://yourdomain.com/index.html?username=STREAMER&clientId=YOUR_ID&clientSecre
 5. **✅ Shutdown source when not visible:** Unchecked
 6. **✅ Refresh browser when scene becomes active**
 
+### Single Clip URL Structure
+```
+https://yourdomain.com/single.html?url=TWITCH_CLIP_URL
+```
+
+The single clip page downloads the provided Twitch clip through the backend, serves the local MP4 from `/clips`, and loops it by default for OBS browser sources.
+
+### Single Clip URL Parameters
+
+| Parameter | Description | Default | Example |
+|-----------|-------------|---------|---------|
+| `url` | Twitch clip URL to download and play | Required | `url=https://clips.twitch.tv/ClipSlug` |
+| `backend` | Backend API URL | Current site origin | `backend=https://yourdomain.com/api` |
+| `showInfo` | Show clip information | `true` | `showInfo=false` |
+| `loop` | Replay the single clip after it ends | `true` | `loop=false` |
+| `forceRefresh` | Redownload the clip even when cached | `false` | `forceRefresh=true` |
+
 ### Example URLs
+
+**Single clip loop for OBS:**
+```
+https://yourdomain.com/single.html?url=https%3A%2F%2Fclips.twitch.tv%2FClipSlug&showInfo=false
+```
 
 **Shroud clips:**
 ```
@@ -158,6 +181,13 @@ Get and download popular clips for a streamer
 - `clientSecret` - Twitch Client Secret  
 - `limit` - Number of clips (default: 15)
 - `period` - Time period: day/week/month/all (default: week)
+
+### GET `/single-clip`
+Download one Twitch clip by URL and return local playback info
+
+**Query Parameters:**
+- `url` - Twitch clip URL from `clips.twitch.tv/...` or `twitch.tv/.../clip/...`
+- `forceRefresh` - Redownload even if the clip is already cached (default: false)
 
 ### GET `/list-clips`
 List all downloaded clips
@@ -207,7 +237,8 @@ Clean up old clips (removes files older than 48 hours)
 ```
 twitch-clips-local-player/
 ├── server.js              # Backend API server
-├── index.html             # Frontend player
+├── index.html             # Top clips frontend player
+├── single.html            # Single clip frontend player
 ├── package.json           # Dependencies
 ├── README.md              # This file
 ├── systemd/

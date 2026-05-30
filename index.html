@@ -23,13 +23,17 @@
         <script>
             class CachedClipPlayer {
                 constructor() {
+                    const params = new URLSearchParams(location.search);
                     this.config = {
-                        username: new URLSearchParams(location.search).get('username') || 'ticklefitz',
-                        clientId: new URLSearchParams(location.search).get('clientId') || 'YOURCLIENTID',
-                        clientSecret: new URLSearchParams(location.search).get('clientSecret') || 'YOURCLIENTSECRET',
-                        backendUrl: new URLSearchParams(location.search).get('backend') || 'https://racer.netandvet.com/api',
-                        showInfo: new URLSearchParams(location.search).get('showInfo') !== 'false',
-                        obsMode: new URLSearchParams(location.search).get('obsMode') === 'true'
+                        username: params.get('username') || 'ticklefitz',
+                        clientId: params.get('clientId') || 'YOURCLIENTID',
+                        clientSecret: params.get('clientSecret') || 'YOURCLIENTSECRET',
+                        backendUrl: params.get('backend') || 'https://racer.netandvet.com/api',
+                        showInfo: params.get('showInfo') !== 'false',
+                        obsMode: params.get('obsMode') === 'true',
+                        clipCount: params.get('clipCount') || '15',
+                        period: params.get('period') || 'week',
+                        forceRefresh: params.get('forceRefresh') === 'true'
                     };
                     
                     this.clips = [];
@@ -124,7 +128,16 @@
                     try {
                         this.status.textContent = 'Loading clips...';
                         
-                        const response = await fetch(`${this.config.backendUrl}/popular-clips/${this.config.username}?clientId=${this.config.clientId}&clientSecret=${this.config.clientSecret}&limit=15&period=week`);
+                        const requestUrl = new URL(`${this.config.backendUrl.replace(/\/$/, '')}/popular-clips/${this.config.username}`);
+                        requestUrl.searchParams.set('clientId', this.config.clientId);
+                        requestUrl.searchParams.set('clientSecret', this.config.clientSecret);
+                        requestUrl.searchParams.set('limit', this.config.clipCount);
+                        requestUrl.searchParams.set('period', this.config.period);
+                        if (this.config.forceRefresh) {
+                            requestUrl.searchParams.set('forceRefresh', 'true');
+                        }
+
+                        const response = await fetch(requestUrl.toString());
                         const data = await response.json();
                         
                         this.clips = data.clips || [];
