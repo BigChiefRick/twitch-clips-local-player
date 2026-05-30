@@ -119,7 +119,7 @@ https://yourdomain.com/index.html?username=STREAMER&clientId=YOUR_ID&clientSecre
 | `username` | Twitch streamer name | Required | `username=shroud` |
 | `clientId` | Twitch App Client ID | Required | `clientId=abc123...` |
 | `clientSecret` | Twitch App Client Secret | Required | `clientSecret=def456...` |
-| `backend` | Backend API URL | `https://yourdomain.com/api` | `backend=http://localhost:3001` |
+| `backend` | Backend API URL | Auto-detects `/clips/api` when hosted under `/clips/`, otherwise `/api` | `backend=http://localhost:3001` |
 | `period` | Time period for clips | `week` | `period=month` |
 | `clipCount` | Number of clips to fetch | `15` | `clipCount=30` |
 | `showInfo` | Show clip information | `true` | `showInfo=false` |
