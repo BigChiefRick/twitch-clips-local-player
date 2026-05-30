@@ -55,6 +55,18 @@
                     this.init();
                 }
 
+                getDefaultBackendUrl() {
+                    const normalizedPath = location.pathname.endsWith('/')
+                        ? location.pathname
+                        : `${location.pathname}/`;
+
+                    if (normalizedPath.startsWith('/clips/')) {
+                        return `${location.origin}/clips/api`;
+                    }
+
+                    return `${location.origin}/api`;
+                }
+
                 setupEvents() {
                     // Handle video end
                     this.video.addEventListener('ended', () => {
