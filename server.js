@@ -39,8 +39,8 @@ app.get('/single.html', (req, res) => {
 });
 
 app.get('/health', (req, res) => {
-    res.json({ 
-        status: 'OK', 
+    res.json({
+        status: 'OK',
         service: 'Cached Twitch Clips Player',
         clipsDir: CLIPS_DIR
     });
@@ -192,23 +192,23 @@ app.get('/popular-clips/:username', async (req, res) => {
         console.log(`Need more clips. Getting fresh ones for ${username}...`);
         const clips = await getPopularClips(username, limit, period, clientId, clientSecret);
         console.log(`Found ${clips.length} clips from Twitch API`);
-        
+
         // Download only new clips (ones we don't already have)
         const downloadedClips = [...existingClips]; // Start with existing
-        
+
         for (const clip of clips) {
             // Skip if we already have this clip
             if (existingClips.some(existing => existing.id === clip.id)) {
                 console.log(`⏭️  Skipping existing: ${clip.title}`);
                 continue;
             }
-            
+
             // Stop if we have enough
             if (downloadedClips.length >= 20) {
                 console.log(`✋ Have enough clips (${downloadedClips.length}), stopping downloads`);
                 break;
             }
-            
+
             try {
                 const downloadResult = await downloadClipLocally(clip, req);
                 if (downloadResult && downloadResult.success) {
@@ -226,7 +226,7 @@ app.get('/popular-clips/:username', async (req, res) => {
         }
 
         console.log(`Final result: ${downloadedClips.length} total clips available`);
-        
+
         res.json({
             success: true,
             username,
@@ -246,17 +246,17 @@ function getExistingClips(req) {
     try {
         const files = fs.readdirSync(CLIPS_DIR);
         const mp4Files = files.filter(f => f.endsWith('.mp4'));
-        
+
         return mp4Files.map(file => {
             const filePath = path.join(CLIPS_DIR, file);
             const stats = fs.statSync(filePath);
-            
+
             // Extract clip ID from filename
             const clipId = file.split('-')[0];
-            
+
             // Extract title from filename (remove ID and extension)
             const titlePart = file.replace(`${clipId}-`, '').replace('.mp4', '').replace(/_/g, ' ');
-            
+
             return {
                 id: clipId,
                 title: titlePart,
@@ -341,13 +341,13 @@ app.post('/cleanup', (req, res) => {
     try {
         const files = fs.readdirSync(CLIPS_DIR);
         let deletedCount = 0;
-        
+
         for (const file of files) {
             if (file.endsWith('.mp4')) {
                 const filePath = path.join(CLIPS_DIR, file);
                 const stats = fs.statSync(filePath);
                 const ageHours = (Date.now() - stats.mtime.getTime()) / (1000 * 60 * 60);
-                
+
                 // Delete files older than 48 hours (increased from 24)
                 if (ageHours > 48) {
                     fs.unlinkSync(filePath);
@@ -356,7 +356,7 @@ app.post('/cleanup', (req, res) => {
                 }
             }
         }
-        
+
         res.json({ success: true, deletedFiles: deletedCount });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -371,9 +371,9 @@ function downloadClipLocally(clip, req) {
         const safeTitle = sanitizeFilenamePart(clip.title, 'untitled', 30);
         const baseFilename = `${safeId}-${safeTitle}`;
         const outputTemplate = path.join(CLIPS_DIR, `${baseFilename}.%(ext)s`);
-        
+
         console.log(`⬇️  Downloading: ${clip.title}`);
-        
+
         const ytDlpProcess = spawn('yt-dlp', [
             '--format', 'best[ext=mp4][acodec!=none]/best[acodec!=none]/best',
             '--output', outputTemplate,
@@ -402,7 +402,7 @@ function downloadClipLocally(clip, req) {
                 try {
                     const files = fs.readdirSync(CLIPS_DIR);
                     const downloadedFile = files.find(f => f.startsWith(`${clip.id}-`));
-                    
+
                     if (downloadedFile) {
                         resolve({
                             success: true,
