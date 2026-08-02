@@ -8,6 +8,7 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3001;
 const CLIPS_DIR = path.join(__dirname, 'downloaded_clips');
+const MAX_CLIPS = 30;
 
 app.use(cors());
 app.use(express.json());
@@ -42,7 +43,8 @@ app.get('/health', (req, res) => {
     res.json({
         status: 'OK',
         service: 'Cached Twitch Clips Player',
-        clipsDir: CLIPS_DIR
+        clipsDir: CLIPS_DIR,
+        maxClips: MAX_CLIPS
     });
 });
 
@@ -164,7 +166,11 @@ function getClipMetadata(clipUrl, fallbackId) {
 // Smart clips endpoint - uses cache first
 app.get('/popular-clips/:username', async (req, res) => {
     const { username } = req.params;
-    const { clientId, clientSecret, limit = 15, period = 'week', forceRefresh = 'false' } = req.query;
+    const { clientId, clientSecret, limit = MAX_CLIPS, period = 'week', forceRefresh = 'false' } = req.query;
+    const requestedLimit = Math.min(
+        Math.max(Number.parseInt(limit, 10) || MAX_CLIPS, 1),
+        MAX_CLIPS
+    );
 
     if (!clientId || !clientSecret) {
         return res.status(400).json({ error: 'clientId and clientSecret required' });
@@ -176,21 +182,21 @@ app.get('/popular-clips/:username', async (req, res) => {
         console.log(`Found ${existingClips.length} existing clips in cache`);
 
         // If we have enough clips and not forcing refresh, use cache
-        if (existingClips.length >= 10 && forceRefresh !== 'true') {
+        if (existingClips.length >= MAX_CLIPS && forceRefresh !== 'true') {
             console.log(`✅ Using ${existingClips.length} cached clips`);
             return res.json({
                 success: true,
                 username,
                 total: existingClips.length,
                 downloaded: existingClips.length,
-                clips: existingClips.slice(0, 20), // Return up to 20 cached clips
+                clips: existingClips.slice(0, MAX_CLIPS),
                 cached: true
             });
         }
 
         // Need more clips - fetch from Twitch
         console.log(`Need more clips. Getting fresh ones for ${username}...`);
-        const clips = await getPopularClips(username, limit, period, clientId, clientSecret);
+        const clips = await getPopularClips(username, requestedLimit, period, clientId, clientSecret);
         console.log(`Found ${clips.length} clips from Twitch API`);
 
         // Download only new clips (ones we don't already have)
@@ -204,7 +210,7 @@ app.get('/popular-clips/:username', async (req, res) => {
             }
 
             // Stop if we have enough
-            if (downloadedClips.length >= 20) {
+            if (downloadedClips.length >= MAX_CLIPS) {
                 console.log(`✋ Have enough clips (${downloadedClips.length}), stopping downloads`);
                 break;
             }
